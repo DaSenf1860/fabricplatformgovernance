@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fabric Request App</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        body { 
+            background: #1a1a1a; 
+            color: #fff; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .container { margin-top: 30px; }
+        .form-select, .form-control { 
+            background: #2d2d2d; 
+            color: #fff; 
+            border: 1px solid #444;
+        }
+        .form-select:focus, .form-control:focus {
+            background: #2d2d2d;
+            color: #fff;
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .table-dark {
+            background: #2d2d2d;
+        }
+        .btn-group {
+            margin: 10px 0;
+        }
+        .view-toggle {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+        }
+        h1, h2, h3 {
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .gap-2 {
+            gap: 0.5rem !important;
+        }
+        .d-flex {
+            display: flex !important;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Hello, Fabric User!</h1>
+    <p>Welcome to your Fabric Request app.</p>
+    <div>
+        <strong>Current View:</strong> <span class="badge bg-info">{{ current_view|title }} View</span><br>
+        <strong>Logged in user:</strong> {{ user.email }}<br>
+        <strong>User email:</strong> {{ user.email }}
+    </div>
+    
+    <!-- View Toggle Section -->
+    <div class="view-toggle">
+        <h3>Switch View</h3>
+        <p>Choose between Admin view (approve workspaces) or Request view (submit new requests)</p>
+        <form method="post" action="/toggle-view" class="d-flex gap-2">
+            <button type="submit" name="view" value="admin" 
+                    class="btn {{ 'btn-primary' if current_view == 'admin' else 'btn-outline-primary' }}">
+                👨‍💼 Admin View
+            </button>
+            <button type="submit" name="view" value="request" 
+                    class="btn {{ 'btn-success' if current_view == 'request' else 'btn-outline-success' }}">
+                📝 Request View
+            </button>
+        </form>
+    </div>
+    
+    <!-- Success/Error Messages -->
+    {% if message %}
+    <div class="alert {{ 'alert-success' if message_type == 'success' else 'alert-danger' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    
+    <hr>
+    
+    <!-- ADMIN VIEW SECTIONS -->
+    {% if current_view == "admin" %}
+    <h2>Approve Workspaces</h2>
+    <p>This is the list of requested workspaces:</p>
+    
+    <table class="table table-dark table-striped">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Workspace Name</th>
+                <th>Workspace Domain</th>
+                <th>Capacity</th>
+                <th>Region</th>
+                <th>Workspace Type</th>
+                <th>Requester</th>
+                <th>RequesterID</th>
+                <th>RequestDate</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ws in workspaces if ws.Status == "requested" %}
+            <tr>
+                <td><span class="badge bg-warning">{{ ws.Status }}</span></td>
+                <td>{{ ws.WorkspaceName }}</td>
+                <td>{{ ws.Domain }}</td>
+                <td>{{ ws.Capacity }}</td>
+                <td>{{ ws.Region }}</td>
+                <td>{{ ws.WorkspaceType }}</td>
+                <td><a href="mailto:{{ ws.Requester }}" style="color: #4dabf7;">{{ ws.Requester }}</a></td>
+                <td><small>{{ ws.RequesterID }}</small></td>
+                <td>{{ ws.RequestDate }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <form method="post" action="/approve">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="workspace_name" class="form-label">Choose a workspace to approve</label>
+                <select class="form-select" id="workspace_name" name="workspace_name" required>
+                    <option value="">Select workspace...</option>
+                    {% for ws in workspaces if ws.Status == "requested" %}
+                    <option value="{{ ws.WorkspaceName }}">{{ ws.WorkspaceName }} ({{ ws.Domain }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="capacity_approval" class="form-label">Choose a capacity</label>
+                <select class="form-select" id="capacity_approval" name="capacity">
+                    {% for capacity in form_options.capacities %}
+                    <option value="{{ capacity.value }}">{{ capacity.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-success">Approve Workspace</button>
+    </form>
+
+    <form method="post" action="/deny" class="mt-4">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="workspace_name_deny" class="form-label">Choose a workspace to deny</label>
+                <select class="form-select" id="workspace_name_deny" name="workspace_name" required>
+                    <option value="">Select workspace...</option>
+                    {% for ws in workspaces if ws.Status == "requested" %}
+                    <option value="{{ ws.WorkspaceName }}">{{ ws.WorkspaceName }} ({{ ws.Domain }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-danger">Deny Workspace</button>
+    </form>
+
+    <form method="post" action="/assign-user" class="mt-4">
+        <h3>Assign User to Workspace</h3>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="workspace_name_assign" class="form-label">Choose a created workspace</label>
+                <select class="form-select" id="workspace_name_assign" name="workspace_name" required>
+                    <option value="">Select workspace...</option>
+                    {% for ws in workspaces if ws.Status == "created" %}
+                    <option value="{{ ws.WorkspaceName }}">{{ ws.WorkspaceName }} ({{ ws.Domain }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="user_email" class="form-label">User Email</label>
+                <input type="email" class="form-control" id="user_email" name="user_email" placeholder="user@domain.com" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="role" class="form-label">Role</label>
+                <select class="form-select" id="role" name="role" required>
+                    <option value="">Select role...</option>
+                    <option value="Data Engineer">Data Engineer</option>
+                    <option value="Data Scientist">Data Scientist</option>
+                    <option value="Data Analyst">Data Analyst</option>
+                    <option value="Data Engineer RTI">Data Engineer RTI</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Assign User</button>
+    </form>
+
+    <hr>
+    
+    <h2>Requested and active Workspaces</h2>
+    <p>This is the list of workspaces which are active or requested:</p>
+    
+    <table class="table table-dark table-striped">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Workspace Name</th>
+                <th>Workspace Domain</th>
+                <th>Capacity</th>
+                <th>Region</th>
+                <th>Workspace Type</th>
+                <th>Requester</th>
+                <th>RequesterID</th>
+                <th>RequestDate</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ws in workspaces %}
+            <tr>
+                <td>
+                    {% if ws.Status == "requested" %}
+                    <span class="badge bg-warning">{{ ws.Status }}</span>
+                    {% elif ws.Status == "approved" %}
+                    <span class="badge bg-success">{{ ws.Status }}</span>
+                    {% elif ws.Status == "created" %}
+                    <span class="badge bg-info">{{ ws.Status }}</span>
+                    {% elif ws.Status == "denied" %}
+                    <span class="badge bg-danger">{{ ws.Status }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ ws.Status }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ ws.WorkspaceName }}</td>
+                <td>{{ ws.Domain }}</td>
+                <td>{{ ws.Capacity }}</td>
+                <td>{{ ws.Region }}</td>
+                <td>{{ ws.WorkspaceType }}</td>
+                <td><a href="mailto:{{ ws.Requester }}" style="color: #4dabf7;">{{ ws.Requester }}</a></td>
+                <td><small>{{ ws.RequesterID }}</small></td>
+                <td>{{ ws.RequestDate }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <!-- REQUEST VIEW SECTIONS -->
+    {% if current_view == "request" %}
+    <h2>Request new Workspace</h2>
+    <form method="post" action="/request">
+        <div class="mb-3">
+            <label class="form-label">Choose a capacity</label>
+            <select class="form-select" name="capacity" id="capacity-select">
+                {% for capacity in form_options.capacities %}
+                <option value="{{ capacity.value }}">{{ capacity.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Choose a domain</label>
+            <select class="form-select" name="domain" id="domain-select">
+                {% for domain in form_options.domains %}
+                <option value="{{ domain.value }}">{{ domain.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <p><strong>You selected:</strong> <span id="selected-summary">{{ form_options.capacities[0].label }}</span></p>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Choose a region</label>
+            <select class="form-select" name="region" id="region-select">
+                {% for region in form_options.regions %}
+                <option value="{{ region.value }}">{{ region.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <p><strong>You selected region:</strong> <span id="selected-region">{{ form_options.regions[0].label }}</span></p>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Workspace Name</label>
+            <input type="text" class="form-control" name="name" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Workspace Type</label>
+            <select class="form-select" name="type_">
+                {% for wtype in form_options.workspace_types %}
+                <option value="{{ wtype.value }}">{{ wtype.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Request Workspace</button>
+    </form>
+    
+    <hr>
+    
+    <!-- Request Workload Item Form -->
+    <h2>Request Workload Item</h2>
+    <div id="workload-request-form">
+        <form method="post" action="/request-workload-item">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="user_workspace" class="form-label">Choose your workspace</label>
+                    <select class="form-select" id="user_workspace" name="workspace_name" onchange="loadUserEligibility()" required>
+                        <option value="">Select workspace...</option>
+                        {% for ws in workspaces if ws.Requester == user.email and ws.Status == "created" %}
+                        <option value="{{ ws.WorkspaceName }}">{{ ws.WorkspaceName }} ({{ ws.Domain }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="workload_type" class="form-label">Choose workload type</label>
+                    <select class="form-select" id="workload_type" name="workload_type" required disabled>
+                        <option value="">Select workspace first...</option>
+                    </select>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="item_name" class="form-label">Item Name</label>
+                    <input type="text" class="form-control" id="item_name" name="item_name" placeholder="Enter item name..." required>
+                </div>
+            </div>
+            
+            <!-- Eligibility Display -->
+            <div id="eligibility-display" class="mb-3" style="display: none;">
+                <h5>Your Eligibility for Selected Workspace:</h5>
+                <div id="eligibility-table-container">
+                    <!-- Eligibility table will be loaded here -->
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-success" id="request-item-btn" disabled>Request Workload Item</button>
+        </form>
+    </div>
+    
+    <hr>
+    
+    <!-- Show user's own requests in request view -->
+    <h3>Your Workspace Requests</h3>
+    <table class="table table-dark table-striped">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Workspace Name</th>
+                <th>Domain</th>
+                <th>Capacity</th>
+                <th>Region</th>
+                <th>Type</th>
+                <th>Request Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ws in workspaces if ws.Requester == user.email %}
+            <tr>
+                <td>
+                    {% if ws.Status == "requested" %}
+                    <span class="badge bg-warning">{{ ws.Status }}</span>
+                    {% elif ws.Status == "approved" %}
+                    <span class="badge bg-success">{{ ws.Status }}</span>
+                    {% elif ws.Status == "created" %}
+                    <span class="badge bg-info">{{ ws.Status }}</span>
+                    {% elif ws.Status == "denied" %}
+                    <span class="badge bg-danger">{{ ws.Status }}</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ ws.Status }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ ws.WorkspaceName }}</td>
+                <td>{{ ws.Domain }}</td>
+                <td>{{ ws.Capacity }}</td>
+                <td>{{ ws.Region }}</td>
+                <td>{{ ws.WorkspaceType }}</td>
+                <td>{{ ws.RequestDate }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+</body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Update summary when selections change
+    document.getElementById('capacity-select').addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        document.getElementById('selected-summary').textContent = selectedOption.text;
+    });
+    
+    document.getElementById('region-select').addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        document.getElementById('selected-region').textContent = selectedOption.text;
+    });
+
+    // Optional: Load form options dynamically via API
+    async function loadFormOptions() {
+        try {
+            const response = await fetch('/api/form-options');
+            const options = await response.json();
+            console.log('Form options loaded:', options);
+            // You could use this to update dropdowns dynamically
+        } catch (error) {
+            console.error('Failed to load form options:', error);
+        }
+    }
+
+    // Call on page load if needed
+    // loadFormOptions();
+
+    // Workload Item Request Functions
+    async function loadUserEligibility() {
+        const workspaceSelect = document.getElementById('user_workspace');
+        const workloadTypeSelect = document.getElementById('workload_type');
+        const eligibilityDisplay = document.getElementById('eligibility-display');
+        const eligibilityTableContainer = document.getElementById('eligibility-table-container');
+        const requestButton = document.getElementById('request-item-btn');
+        
+        const selectedWorkspace = workspaceSelect.value;
+        const userEmail = '{{ user.email }}';
+        
+        if (!selectedWorkspace) {
+            workloadTypeSelect.disabled = true;
+            workloadTypeSelect.innerHTML = '<option value="">Select workspace first...</option>';
+            eligibilityDisplay.style.display = 'none';
+            requestButton.disabled = true;
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/workspace/${selectedWorkspace}/eligibility/${userEmail}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                console.error('Error loading eligibility:', data.error);
+                return;
+            }
+            
+            // Populate workload type dropdown
+            workloadTypeSelect.innerHTML = '<option value="">Select workload type...</option>';
+            const eligibleTypes = data.eligibility.filter(item => item.Eligibility === 'eligible');
+            
+            data.eligibility.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.ItemType;
+                option.textContent = `${item.ItemType} (${item.Eligibility})`;
+                if (item.Eligibility !== 'eligible') {
+                    option.disabled = true;
+                    option.style.color = '#dc3545';
+                }
+                workloadTypeSelect.appendChild(option);
+            });
+            
+            // Show eligibility table
+            eligibilityTableContainer.innerHTML = `
+                <table class="table table-dark table-sm">
+                    <thead>
+                        <tr>
+                            <th>Item Type</th>
+                            <th>Eligibility Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.eligibility.map(item => `
+                            <tr>
+                                <td>${item.ItemType}</td>
+                                <td>
+                                    <span class="badge ${item.Eligibility === 'eligible' ? 'bg-success' : 'bg-warning'}">
+                                        ${item.Eligibility}
+                                    </span>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            eligibilityDisplay.style.display = 'block';
+            workloadTypeSelect.disabled = false;
+            
+        } catch (error) {
+            console.error('Failed to load user eligibility:', error);
+        }
+    }
+    
+    // Enable request button when workload type is selected
+    document.getElementById('workload_type').addEventListener('change', function() {
+        const requestButton = document.getElementById('request-item-btn');
+        const itemNameInput = document.getElementById('item_name');
+        
+        requestButton.disabled = !(this.value && itemNameInput.value);
+    });
+    
+    document.getElementById('item_name').addEventListener('input', function() {
+        const requestButton = document.getElementById('request-item-btn');
+        const workloadTypeSelect = document.getElementById('workload_type');
+        
+        requestButton.disabled = !(this.value && workloadTypeSelect.value);
+    });
+</script>
+</html>

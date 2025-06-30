@@ -1,0 +1,4 @@
+
+docker build -t fabricrequestportal:9 .
+docker tag fabricrequestportal:9 fabricappsajr.azurecr.io/fabricrequestportal:9
+docker push fabricappsajr.azurecr.io/fabricrequestportal:9
