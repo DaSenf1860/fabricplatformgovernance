@@ -173,46 +173,71 @@ async def toggle_view(request: Request, view: str = Form(...)):
     return RedirectResponse(f"/?view={view}", status_code=303)
 
 @app.post("/approve")
-async def approve_workspace(workspace_name: str = Form(...)):
+async def approve_workspace(workspace_name: str = Form(...), capacity: str = Form(...)):
     """Approve workspace and create it in Microsoft Fabric"""
     try:
+        import traceback
+        print(f"[APPROVE] Starting approval for workspace: '{workspace_name}', capacity: '{capacity}'", flush=True)
+        
         # Get fresh workspace data from database
         fresh_workspaces = get_fresh_workspaces()
         ws_hits = [ws for ws in fresh_workspaces if ws["WorkspaceName"] == workspace_name]
         
         if not ws_hits:
-            logger.warning(f"Workspace {workspace_name} not found in database")
+            print(f"[APPROVE] Workspace '{workspace_name}' not found in database", flush=True)
             return RedirectResponse(f"/?view=admin&error=not_found&workspace={workspace_name}", status_code=303)
         
         ws = ws_hits[0]
+        print(f"[APPROVE] Found workspace: {ws}", flush=True)
         ws["Status"] = "created"
 
-        capa = fcc.get_capacity(capacity_name=ws["Capacity"])
+        print(f"[APPROVE] Getting capacity: {capacity}", flush=True)
+        print(fcc.list_capacities())
+        capa = fcc.get_capacity(capacity_name=capacity)
+        print(f"[APPROVE] Got capacity ID: {capa.id}", flush=True)
+
+        print(f"[APPROVE] Creating workspace: {workspace_name}", flush=True)
         ws_item = fcc.create_workspace(display_name=workspace_name, capacity_id=capa.id)
+        print(f"[APPROVE] Created workspace with ID: {ws_item.id}", flush=True)
+
+        # Look up the requester's object ID from UserLookup table
+        requester_email = ws["Requester"]
+        print(f"[APPROVE] Looking up object ID for requester: {requester_email}", flush=True)
+        requester_object_id = sql_connection.get_user_object_id(requester_email)
+        if not requester_object_id:
+            print(f"[APPROVE ERROR] Requester '{requester_email}' not found in UserLookup table", flush=True)
+            return RedirectResponse(f"/?view=admin&error=approval_failed&workspace={workspace_name}", status_code=303)
+        print(f"[APPROVE] Found requester object ID: {requester_object_id}", flush=True)
 
         # Add role assignment for the requester
+        print(f"[APPROVE] Adding role assignment for requester: {requester_object_id}", flush=True)
         fcc.add_workspace_role_assignment(
             workspace_id=ws_item.id,
             principal={
-                "id": ws["RequesterID"],
+                "id": requester_object_id,
                 "type": "User"
             },
             role='Contributor'
         )
+        print(f"[APPROVE] Role assignment added successfully", flush=True)
         
         # Update database with new status and workspace ID
+        print(f"[APPROVE] Updating database for workspace: {workspace_name}", flush=True)
         sql_connection.update_workspace(
             workspace=workspace_name, 
             status="created", 
             workspace_id=ws_item.id
         )
+        print(f"[APPROVE] Database updated successfully", flush=True)
         
         logger.info(f"Workspace {workspace_name} has been approved and created with ID: {ws_item.id}")
         
         return RedirectResponse(f"/?view=admin&success=approved&workspace={workspace_name}", status_code=303)
         
     except Exception as e:
-        logger.error(f"Error approving workspace {workspace_name}: {e}")
+        import traceback
+        print(f"[APPROVE ERROR] Error approving workspace '{workspace_name}': {e}", flush=True)
+        print(f"[APPROVE ERROR] Traceback:\n{traceback.format_exc()}", flush=True)
         return RedirectResponse(f"/?view=admin&error=approval_failed&workspace={workspace_name}", status_code=303)
 
 @app.post("/request")
@@ -546,6 +571,6 @@ def get_user_or_fallback(request: Request):
     logger.info("Using fallback user (Easy Auth not available)")
     return {
         "name": "Admin User (Fallback)",
-        "email": "admin@-----.com",
+        "email": "johndoe@-----.onmicrosoft.com",
         "id": "fallback-user-id"
     }

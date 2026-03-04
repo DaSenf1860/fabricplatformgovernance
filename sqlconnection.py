@@ -143,3 +143,10 @@ class SQLConnection:
     def get_capacities(self):
         sql = "SELECT [capacityId], [capacityName], [region] FROM [dbo].[Capacities];"
         return self.run_query(sql)
+
+    def get_user_object_id(self, user_mail):
+        sql = f"SELECT userObjectId FROM dbo.UserLookup WHERE userMail = '{user_mail}';"
+        result = self.run_query(sql)
+        if result.empty:
+            return None
+        return result["userObjectId"].iloc[0]
